@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -10,7 +9,7 @@ public class TargetFinder : MonoBehaviour
     public static bool OnTarget;
     
     private static TargetFinder Instance;
-    private static List<Transform> _targets, _targetCycle;
+    private static List<Transform> _targets;
     private static Camera _camera;
 
     private static bool _cd;
@@ -25,19 +24,10 @@ public class TargetFinder : MonoBehaviour
         _camera = Camera.main;
         
         _targets = new List<Transform>();
-        _targetCycle = new List<Transform>();
-
+        
         OnTarget = false;
         CurrentTarget = null;
         _cd = false;
-    }
-
-    private void Update()
-    {
-        if (OnTarget)
-        {
-            TargetFind();
-        }
     }
 
     public static void TargetLockOn()
@@ -74,14 +64,25 @@ public class TargetFinder : MonoBehaviour
 
     public static void TargetSelect(int i)
     {
-        if (!_cd && _targetCycle != null && _targetCycle.Count > 1)
+        var tCycle = new List<Transform>();
+
+        foreach (var t in _targets)
         {
-            var currenIndex = _targetCycle.FindIndex(a => a.transform == CurrentTarget);
+            if (_camera.WorldToViewportPoint(t.position).x is < 0 or > 1)
+                continue;
+            tCycle.Add(t);
+        }
+        
+        tCycle.Sort((a,b) => _camera.WorldToViewportPoint(a.position).x.CompareTo(_camera.WorldToViewportPoint(b.position).x));
+
+        if (!_cd && tCycle.Count > 1)
+        {
+            var currenIndex = tCycle.FindIndex(a => a.transform == CurrentTarget);
             
             var nextIndex = currenIndex + i;
-            if (nextIndex >= 0 && nextIndex < _targetCycle.Count)
+            if (nextIndex >= 0 && nextIndex < tCycle.Count)
             {
-                CurrentTarget = _targetCycle[nextIndex];
+                CurrentTarget = tCycle[nextIndex];
                 _cd = true;
                 Instance.StartCoroutine("ResetCd");
             }
@@ -90,20 +91,23 @@ public class TargetFinder : MonoBehaviour
 
     private static Transform TargetFind()
     {
-        _targetCycle.Clear();
-        
+        var topDot = 0f;
+        Transform pickedTarget = null;
+
         foreach (var target in _targets)
         {
             var targetDot =
                 Vector3.Dot(_camera.transform.forward.normalized, (target.transform.position - _camera.transform.position).normalized);
-            if (targetDot < .835f) continue;
-            
-            _targetCycle.Add(target);
-        }
+            if (targetDot < .9f) continue;
 
-        _targetCycle.Sort((a,b) => _camera.WorldToViewportPoint(a.position).x.CompareTo(_camera.WorldToViewportPoint(b.position).x));
+            if (targetDot >= topDot)
+            {
+                topDot = targetDot;
+                pickedTarget = target;
+            }
+        }
         
-        return _targetCycle[^1];
+        return pickedTarget;
     }
     
     private IEnumerator ResetCd()
